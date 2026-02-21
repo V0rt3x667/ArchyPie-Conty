@@ -49,11 +49,11 @@ unmount_chroot () {
 }
 
 run_in_chroot () {
-	if [ -n "${CHROOT_AUR}" ]; then
-		chroot --userspec=aur:aur "${bootstrap}" /usr/bin/env LANG=en_US.UTF-8 TERM=xterm PATH="/bin:/sbin:/usr/bin:/usr/sbin" "$@"
-	else
+	#if [ -n "${CHROOT_AUR}" ]; then
+	#	chroot --userspec=aur:aur "${bootstrap}" /usr/bin/env LANG=en_US.UTF-8 TERM=xterm PATH="/bin:/sbin:/usr/bin:/usr/sbin" "$@"
+	#else
 		chroot "${bootstrap}" /usr/bin/env LANG=en_US.UTF-8 TERM=xterm PATH="/bin:/sbin:/usr/bin:/usr/sbin" "$@"
-	fi
+	#fi
 }
 
 install_packages () {
@@ -77,26 +77,26 @@ install_packages () {
 
 }
 
-install_aur_packages () {
-	cd /home/aur
+# install_aur_packages () {
+# 	cd /home/aur
 
-	echo "Checking if packages are present in the AUR, please wait..."
-	for p in ${aur_pkgs}; do
-		if ! yay -a -G "${p}" &>/dev/null; then
-			bad_aur_pkglist="${bad_aur_pkglist} ${p}"
-		fi
-	done
+# 	echo "Checking if packages are present in the AUR, please wait..."
+# 	for p in ${aur_pkgs}; do
+# 		if ! yay -a -G "${p}" &>/dev/null; then
+# 			bad_aur_pkglist="${bad_aur_pkglist} ${p}"
+# 		fi
+# 	done
 
-	if [ -n "${bad_aur_pkglist}" ]; then
-		echo ${bad_aur_pkglist} > /home/aur/bad_aur_pkglist.txt
-	fi
+# 	if [ -n "${bad_aur_pkglist}" ]; then
+# 		echo ${bad_aur_pkglist} > /home/aur/bad_aur_pkglist.txt
+# 	fi
 
-	for i in {1..10}; do
-		if yes | yay --needed --removemake --builddir /home/aur -a -S ${aur_pkgs}; then
-			break
-		fi
-	done
-}
+# 	for i in {1..10}; do
+# 		if yes | yay --needed --removemake --builddir /home/aur -a -S ${aur_pkgs}; then
+# 			break
+# 		fi
+# 	done
+# }
 
 generate_pkg_licenses_file () {
 	pacman -Qi | grep -E '^Name|Licenses' |  cut -d ":" -f 2 | paste -d ' ' - - > /pkglicenses.txt
@@ -187,23 +187,27 @@ sed -i 's/#DisableSandboxSyscalls/#DisableSandboxSyscalls\nDisableSandbox/' "${b
 run_in_chroot pacman-key --init
 run_in_chroot pacman-key --populate archlinux
 
+# Add ArchyPie repo key
+run_in_chroot pacman-key --recv-key 87353250AEC9CF3A876EC3CBBCB4D9FBFEEE2E93 --keyserver keyserver.ubuntu.com
+run_in_chroot pacman-key --lsign-key 87353250AEC9CF3A876EC3CBBCB4D9FBFEEE2E93
+
 # Add Chaotic-AUR repo
-run_in_chroot pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
-run_in_chroot pacman-key --lsign-key 3056513887B78AEB
+#run_in_chroot pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
+#run_in_chroot pacman-key --lsign-key 3056513887B78AEB
 
-if ! run_in_chroot pacman --noconfirm -U \
-	 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' \
-	 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst'; then
-	echo "Seems like Chaotic-AUR keyring or mirrorlist is currently unavailable"
-	echo "Please try again later"
-	exit 1
-fi
+# if ! run_in_chroot pacman --noconfirm -U \
+# 	 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst' \
+# 	 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst'; then
+# 	echo "Seems like Chaotic-AUR keyring or mirrorlist is currently unavailable"
+# 	echo "Please try again later"
+# 	exit 1
+# fi
 
-{
-	echo
-	echo "[chaotic-aur]"
-	echo "Include = /etc/pacman.d/chaotic-mirrorlist"
-} >> "${bootstrap}"/etc/pacman.conf
+# {
+# 	echo
+# 	echo "[chaotic-aur]"
+# 	echo "Include = /etc/pacman.d/chaotic-mirrorlist"
+# } >> "${bootstrap}"/etc/pacman.conf
 
 # Do not install unneeded files (man pages and Nvidia firmwares)
 sed -i 's/#NoExtract   =/NoExtract   = usr\/lib\/firmware\/nvidia\/\* usr\/share\/man\/\*/' "${bootstrap}"/etc/pacman.conf
@@ -237,21 +241,21 @@ if ! run_in_chroot bash -c install_packages; then
 	exit 1
 fi
 
-if [ "${#AUR_PACKAGES[@]}" -ne 0 ]; then
-	run_in_chroot pacman --noconfirm --needed -S base-devel yay
-	run_in_chroot useradd -m -G wheel aur
-	echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" >> "${bootstrap}"/etc/sudoers
+# if [ "${#AUR_PACKAGES[@]}" -ne 0 ]; then
+# 	run_in_chroot pacman --noconfirm --needed -S base-devel yay
+# 	run_in_chroot useradd -m -G wheel aur
+# 	echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" >> "${bootstrap}"/etc/sudoers
 
-	for p in "${AUR_PACKAGES[@]}"; do
-		aur_pkgs="${aur_pkgs} aur/${p}"
-	done
-	export aur_pkgs
+# 	for p in "${AUR_PACKAGES[@]}"; do
+# 		aur_pkgs="${aur_pkgs} aur/${p}"
+# 	done
+# 	export aur_pkgs
 
-	export -f install_aur_packages
-	CHROOT_AUR=1 HOME=/home/aur run_in_chroot bash -c install_aur_packages
-	mv "${bootstrap}"/home/aur/bad_aur_pkglist.txt "${bootstrap}"/opt
-	rm -rf "${bootstrap}"/home/aur
-fi
+# 	export -f install_aur_packages
+# 	CHROOT_AUR=1 HOME=/home/aur run_in_chroot bash -c install_aur_packages
+# 	mv "${bootstrap}"/home/aur/bad_aur_pkglist.txt "${bootstrap}"/opt
+# 	rm -rf "${bootstrap}"/home/aur
+# fi
 
 run_in_chroot locale-gen
 
@@ -276,7 +280,7 @@ rm -f "${bootstrap}"/var/cache/pacman/pkg/*
 # later in the conty-start.sh script
 mkdir "${bootstrap}"/media
 mkdir "${bootstrap}"/initrd
-mkdir -p "${bootstrap}"/usr/share/steam/compatibilitytools.d
+#mkdir -p "${bootstrap}"/usr/share/steam/compatibilitytools.d
 touch "${bootstrap}"/etc/asound.conf
 touch "${bootstrap}"/etc/localtime
 chmod 755 "${bootstrap}"/root
